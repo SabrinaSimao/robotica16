@@ -11,122 +11,166 @@ import Follow
 bridge = CvBridge()
 atraso = 1.5
 objeto = None
+fundo = None
 cx = None
 cy = None
 radius = None
 pos = [[0,0],[0,0]]
 direction = 0
 primeira = True
+deslocamentos=[]
 
-def getOBJ(foto,foto1):
+
+def getOBJ(objeto,fundo,frame):
 	global cx
 	global cy
 	global radius
 	global pos
-	if foto != None:
-		foto = cv2.cvtColor(foto, cv2.COLOR_RGB2HSV)
-		hist = cv2.calcHist([foto],[0], None, [180], [1, 170] )
+	global direction
+	global deslocamentos
+	if objeto != None and fundo != None:
+		#lower_yellow = np.array([150,0,50])
+		#upper_yellow = np.array([169,255,255])
+		#mask = cv2.inRange(hsv,lower_yellow,upper_yellow)
+		objeto_gray = cv2.cvtColor(objeto,cv2.COLOR_BGR2GRAY)
+		fundo_gray= cv2.cvtColor(fundo,cv2.COLOR_BGR2GRAY)
+		w1 = cv2.subtract(objeto_gray,fundo_gray)
+		w2 = cv2.subtract(fundo_gray,objeto_gray)
+		mask = cv2.bitwise_or(w1, w2)
+		ret ,mask = cv2.threshold(mask,np.percentile(mask, 95),255,cv2.THRESH_BINARY)
+		kernel = np.ones((3,3),np.uint8)
+		opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+		close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
+		cv2.imshow("mask",close)
+		cv2.waitKey(1)
+		res = cv2.bitwise_and(objeto,objeto,mask = close)
+		cv2.imshow("res",res)
+		cv2.waitKey(1)
+		blur = cv2.GaussianBlur(res, (5,5),0)
+		blur =  cv2.cvtColor(blur,cv2.COLOR_BGR2HSV)
+		frame = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
+		hist = cv2.calcHist([blur],[0], close, [180], [1, 179] )
 		cv2.normalize(hist,hist,0,255,cv2.NORM_MINMAX)
-		foto1 = cv2.cvtColor(foto1, cv2.COLOR_RGB2HSV)
-		dst = cv2.calcBackProject([foto1],[0],hist,[0,180],1)
+		dst = cv2.calcBackProject([frame],[0],hist,[0,180],1)
 		kernel = np.ones((5,5),np.uint8)
-		opening = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel)
-		lower = cv2.cv.Scalar(100)
-		higher = cv2.cv.Scalar(255)
-		mask = cv2.inRange(opening, lower, higher)
-
-		mask_video = bridge.imgmsg_to_cv2(mask, "bgr8")
-        cv2.imshow("mask", mask_video)
-		
-		contours, hierarchy = cv2.findContours(mask,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+		ret ,contornos = cv2.threshold(dst,np.percentile(dst, 95),255,cv2.THRESH_BINARY)
+		opening = cv2.morphologyEx(contornos, cv2.MORPH_OPEN, kernel)
+		close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
+		mostrar = close
+		contours, hierarchy = cv2.findContours(close,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 		areas = sorted(contours, key=cv2.contourArea, reverse=True)
-		maior_area= cv2.contourArea(areas[0])
-		maior_area
-		indice = None
-		for i in range(len(contours)):
-			if cv2.contourArea(contours[i]) == maior_area:
-				indice = i
-				pass       
-		cnt = contours[indice]
-		M = cv2.moments(cnt)  
-		cx = int(M['m10']/M['m00'])
-		cy = int(M['m01']/M['m00']) 
-		(x,y), radius = cv2.minEnclosingCircle(cnt)
-		#center = (int(x),int(y))
-		radius = int(radius)
-		if len(pos) <2:
-			pos.append((cx,cy))
-		else:
-			pos[0] = pos[1]
-			pos[1] = (cx,cy)
+		if len(areas) >=1:
+			maior_area= cv2.contourArea(areas[0])
+			indice = None
+			for i in range(len(contours)):
+				if cv2.contourArea(contours[i]) == maior_area:
+					indice = i
+					pass       
+			cnt = contours[indice]
+			(x,y),radius = cv2.minEnclosingCircle(cnt)
+			center = (int(x),int(y))
+			cx = center[0]
+			cy = center[1]
+			radius = int(radius)
+			frame = cv2.cvtColor(frame,cv2.COLOR_HSV2RGB)
+			cv2.circle(frame,center,radius,(255,255,255),2)  
+			print("ELE ACHOU ALGUMA ÁREA") 
+			cv2.imshow("back",mostrar)
+			cv2.waitKey(1)
+			if maior_area>700:
+				if len(pos) <2:
+					pos.append((cx,cy))
+				else:
+					pos[0] = pos[1]
+					pos[1] = (cx,cy)
 
-		deslocamento = ((pos[0][0]-pos[1][0])^2 + (pos[0][1]-pos[1][1])^2)^(1/2)
-
-		if len(pos)==2 and deslocamento > 500:
-			cx = None
-			cy = None
-			radius = None
-			print(".")
-			if pos[1][0]-pos[0][0] >  0:
-				direction= 1
-				Follow.Search(direction)
+			deslocamento = ((pos[0][0]-pos[1][0])^2 + (pos[0][1]-pos[1][1])^2)^(1/2)
+			print('DESLOCAMENTO: {0}'.format(deslocamento))
+			if len(deslocamentos)<2:
+				deslocamentos.append(deslocamento)
 			else:
-				direction = 0
-				Follow.Search(direction)
-			print("sumiu, vou procurar")
+				deslocamentos[0] = deslocamentos[1]
+				deslocamentos[1] = deslocamento
+
+			if (len(pos)==2 and deslocamento > 100) or maior_area<500:
+				cx = None
+				cy = None
+				radius = None
+				print(".")
+				if pos[1][0]-pos[0][0] >  0:
+					direction= True
+					Follow.Search(direction)
+				else:
+					direction = False
+					Follow.Search(direction)
+				print("sumiu, vou procurar")
+			else:	
+				if abs(deslocamentos[1]-deslocamentos[0])<50:
+					Follow.main(radius*2,(float(cx),float(cy)))
+					print(cx,cy,radius*2)
+					print("achei!!")
+			return cx,cy,radius
 		else:
-			print("achei!!")
+			direction = False
+			Follow.Search(direction)
+	else:	
+		print("objeto e fundo ainda não aprendidos")
 
-		return cx,cy,radius
-	else:
-		print("A imagem ainda não foi aprendida")
-		return 0
-
-def learnOBJ(imagem_capturada):
-    global objeto
-    objeto = imagem_capturada
-	print("capturou a imagem")
-    return 
+def learn_background(frame):
+	print("aprendeu fundo")
+	global fundo
+	fundo = frame
+	return
+def learn_obj(frame):
+	print("aprendeu obj")
+	global objeto
+	objeto = frame
+	return
 
 def recebe(imagem):
-    global cv_image
-    global objeto
-    global primeira
-    now = rospy.get_rostime()
-    imgtime = imagem.header.stamp
-    lag = now-imgtime
-    delay = (lag.secs+lag.nsecs/1000000000.0)
-    if delay > atraso:
-        return 
-    print("DELAY", delay)
-    try:
-        antes = time.clock()
-        cv_image = bridge.imgmsg_to_cv2(imagem, "bgr8")
-        cv2.imshow("video", cv_image)
-		if primeira == True:
-				k = cv2.waitKey(1)
-				if (k == 27):         # wait for ESC key to exit
-					learnOBJ(cv_image)
-					primeira = False	
-		
+	global cv_image
+	global objeto
+	global fundo
+	now = rospy.get_rostime()
+	imgtime = imagem.header.stamp
+	lag = now-imgtime
+	delay = (lag.secs+lag.nsecs/1000000000.0)
+	if delay > atraso:
+		return 
+		print("DELAY", delay)
+	try:
+		antes = time.clock()
+		cv_image = bridge.imgmsg_to_cv2(imagem, "bgr8")
+		#cv2.imshow("video", cv_image)		
+		#cv2.waitKey(1)
 		depois = time.clock()
-		getOBJ(objeto,cv_image)
-		#("TEMPO", depois-antes)
-    except CvBridgeError as e:
-        print(e)
-	    
+		k = cv2.waitKey(1)
+		if k==27:
+			learn_background(cv_image)
+		if k==ord('s'):
+			learn_obj(cv_image)
+		getOBJ(objeto,fundo,cv_image)
+	except CvBridgeError as e:
+		print(e)
 if __name__=="__main__":
 	rospy.init_node("brain")
 	recebedor = rospy.Subscriber("/camera/image_raw", Image, recebe, queue_size=10, buff_size = 2**24)
-	cv2.namedWindow("video")
+	rospy.Subscriber("/scan", Follow.LaserScan, Follow.scaneou)
+	rospy.Subscriber("/bump",Follow.Bump,Follow.bateu)
+
+	cv2.namedWindow("res")
 	cv2.namedWindow("mask")
+	cv2.namedWindow("back")
+	
 	try:
 		while not rospy.is_shutdown():
-			if cx!=None and cy != None:
-				Follow.main(radius*2,(cx,cy))		
+			Follow.Survival()
 			rospy.sleep(0.1)
+			k = cv2.waitKey(1);
+			if k==ord('l'):
+				Follow.toggleLaser();
 
 	except rospy.ROSInterruptException:
-	    print("Ocorreu uma exceção com o rospy")
+		print("Ocorreu uma exceção com o rospy")
 
 	

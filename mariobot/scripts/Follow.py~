@@ -1,8 +1,11 @@
-
-import roslib; roslib.load_manifest('teleop_twist_keyboard')
+#!/usr/bin/env python
+# -*- coding:utf-8 -*- 
+import roslib;
 import rospy
 
 from geometry_msgs.msg import Twist, Vector3, Pose
+from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Bump
 
 import sys, select, termios, tty
 
@@ -14,37 +17,43 @@ res = (640,480)
 
 middleZone = 20;
 Ylimit = 50;
-
+delta= None
 speed = 1;
-turnSpeed = 0.5;
+turnSpeed = 2.5;
 
 #--
 aborted = False
 laserScan = [];
+batidas = [];
 
 def main(size, pos):
-    wheel = (0,0)
-    if(aborted):
-        return;
+    print("main")
+    wheel = [0,0]
+    global delta
+    #if(aborted):
+     #   print("bebe morto")
+      #  return;
         
-    Survival()
+    #Survival()
     
-    if(size > maxSize or pos[1] <= Ylimit):
-        SendSpeed(wheel)
-        return
+    #if(size > maxSize or pos[1] <= Ylimit):
+    #    SendSpeed(wheel)
+    #    return
     
-    wheel += (speed,0)
+    wheel = [speed,0]
     obgDist = pos[0] - (res[0] / 2)
-    right = obgDist >= 0
-    
-    if(right):
-        if(obgDist >= middleZone):
-            delta = turnSpeed * (obgDist / (res[0] / 2))
-            wheel += (0,-delta)
-    else:
-        if(abs(obgDist) >= middleZone):
-            delta = turnSpeed * (abs(obgDist) / (res[0] / 2))
-            wheel += (0,delta)
+
+
+    #if(obgDist >= middleZone):
+    delta = -turnSpeed * (float(obgDist / (res[0] / 2)))
+    wheel = [speed, delta]
+
+    print("odist",obgDist)
+
+
+    print(wheel)
+    SendSpeed(wheel);
+    print(delta)
     
     
 def SendSpeed(wheel):
@@ -54,21 +63,26 @@ def SendSpeed(wheel):
     
     velocidadeFinal.publish(vel)
     
-    return
     #função que manda pro robo as velocidades de cada roda
     
 def scaneou(laser):
     global laserScan
-    laserScan = laser.rangers
-    
+    laserScan = laser.ranges
+
+def bateu(bump_obj):
+	print(bump_obj.leftFront)
+	print(bump_obj.rightFront)
+	print(bump_obj.leftSide)
+	print(bump_obj.rightSide)
     
 def Survival():
     global laserScan
     rospy.Subscriber("/scan", LaserScan, scaneou)
-    print(laserScan)
-    bumper = [0,0] #pegar bumper dps !!!!!!!!
+    #print(laserScan)
+    rospy.Subscriber("/bump",Bump,bateu)
     
-    if(bumper[0] == 1 or bumber[1] == 1):
+    if(bumper[0] == 1 or bumper[1] == 1):
+        print("aboooooooooooortou")
         Abort();
 
 def Abort():
@@ -79,6 +93,6 @@ def Abort():
 
 def Search(right):
     if(right):
-        SendSpeed([0,-0.1])
+        SendSpeed([0,-0.3])
     else:
-        SendSpeed([0,0.1])
+        SendSpeed([0,0.3])
