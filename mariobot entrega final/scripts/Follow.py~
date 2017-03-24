@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+# -*- coding:utf-8 -*- 
+import roslib;
+import rospy
+
+from geometry_msgs.msg import Twist, Vector3, Pose
+from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Bump
+
+import sys, select, termios, tty
+
+msg = """
+
+"""
+maxSize = 450
+res = (640,480)
+
+middleZone = 20;
+Ylimit = 50;
+delta= None
+speed = 1;
+turnSpeed = 2.5;
+
+#--
+aborted = False
+laserScan = [];
+batidas = [];
+
+def main(size, pos):
+    print("main")
+    wheel = [0,0]
+    global delta
+    #if(aborted):
+     #   print("bebe morto")
+      #  return;
+        
+    #Survival()
+    
+    #if(size > maxSize or pos[1] <= Ylimit):
+    #    SendSpeed(wheel)
+    #    return
+    
+    wheel = [speed,0]
+    obgDist = pos[0] - (res[0] / 2)
+
+
+    #if(obgDist >= middleZone):
+    delta = -turnSpeed * (float(obgDist / (res[0] / 2)))
+    wheel = [speed, delta]
+
+    print("odist",obgDist)
+
+
+    print(wheel)
+    SendSpeed(wheel);
+    print(delta)
+    
+    
+def SendSpeed(wheel):
+    
+    vel = Twist(Vector3(wheel[0],0,0),Vector3(0,0,wheel[1]))    
+    velocidadeFinal = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
+    
+    velocidadeFinal.publish(vel)
+    
+    #função que manda pro robo as velocidades de cada roda
+    
+def scaneou(laser):
+    global laserScan
+    laserScan = laser.ranges
+
+def bateu(bump_obj):
+	print(bump_obj.leftFront)
+	print(bump_obj.rightFront)
+	print(bump_obj.leftSide)
+	print(bump_obj.rightSide)
+    
+def Survival():
+    global laserScan
+    rospy.Subscriber("/scan", LaserScan, scaneou)
+    #print(laserScan)
+    rospy.Subscriber("/bump",Bump,bateu)
+    
+    if(bumper[0] == 1 or bumper[1] == 1):
+        print("aboooooooooooortou")
+        Abort();
+
+def Abort():
+    global aborted
+    aborted = True
+    #dar ré por um tempo e virar um pouco
+    #aborted = False
+
+def Search(right):
+    if(right):
+        SendSpeed([0,-0.3])
+    else:
+        SendSpeed([0,0.3])
